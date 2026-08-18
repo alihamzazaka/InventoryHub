@@ -1,0 +1,35 @@
+@page "/"
+@using InventoryHub.Client.Models
+@using InventoryHub.Client.Services
+@inject ProductService Products
+
+<PageTitle>InventoryHub</PageTitle>
+
+<div class="hero"><div><h1>InventoryHub</h1><p>Inventory management dashboard</p></div><div class="badge">REST API</div></div>
+
+<div class="toolbar">
+    <input placeholder="Search products..." @bind="search" @bind:event="oninput" @bind:after="Reload" />
+    <select @bind="category" @bind:after="Reload"><option value="">All categories</option><option>Electronics</option><option>Furniture</option><option>Stationery</option></select>
+    <button @onclick="Reload">Refresh</button>
+</div>
+
+@if (loading) { <div class="state">Loading inventory...</div> }
+else if (!string.IsNullOrEmpty(error)) { <div class="error">@error</div> }
+else if (response is not null) {
+    <div class="summary">Showing @response.Data.Count of @response.TotalCount products</div>
+    <div class="grid">
+        @foreach (var product in response.Data) {
+            <article class="card"><div class="category">@product.Category</div><h2>@product.Name</h2><p>@product.Description</p><div class="bottom"><strong>@product.Price.ToString("C")</strong><span>Stock: @product.Quantity</span></div></article>
+        }
+    </div>
+    <div class="pagination"><button disabled="@(response.Page <= 1)" @onclick="Previous">Previous</button><span>Page @response.Page</span><button disabled="@(response.Page * response.PageSize >= response.TotalCount)" @onclick="Next">Next</button></div>
+}
+
+@code {
+    private PagedResponse<Product>? response; private string search = ""; private string category = ""; private string? error; private bool loading; private int page = 1; private CancellationTokenSource? cts;
+    protected override async Task OnInitializedAsync() => await Load();
+    private async Task Reload() { page = 1; await Load(); }
+    private async Task Previous() { if (page > 1) { page--; await Load(); } }
+    private async Task Next() { if (response is not null && page * response.PageSize < response.TotalCount) { page++; await Load(); } }
+    private async Task Load() { cts?.Cancel(); cts?.Dispose(); cts = new(); loading = true; error = null; try { response = await Products.GetProductsAsync(page, 6, search, category, cts.Token); } catch (OperationCanceledException) { } catch (Exception ex) { error = $"Unable to load inventory: {ex.Message}"; } finally { loading = false; } }
+}
